@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Env
+.env
+.env.*.local
+
+# Next.js / React builds & caches
+.next/
+**/.next/
+out/
+build/
+dist/
+coverage/
+
+# Logs & misc
+*.log
+.DS_Store
