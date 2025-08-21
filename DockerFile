@@ -1,0 +1,33 @@
+# ---------- builder ----------
+FROM node:20-alpine AS builder
+WORKDIR /app
+# For some Next.js native deps
+RUN apk add --no-cache libc6-compat
+COPY package*.json ./
+# Install deps with a clean lockfile
+RUN npm ci --no-audit --no-fund
+# Copy source
+COPY . .
+# Build the app
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN npm run build
+
+# Optionally slim node_modules for runtime
+RUN npm ci --omit=dev --no-audit --no-fund
+
+# ---------- runner ----------
+FROM node:20-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8080
+ENV HOST=0.0.0.0
+
+# Copy only what's needed to run
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/next.config.js ./next.config.js
+
+EXPOSE 8080
+CMD ["npx", "next", "start", "-p", "8080"]
