@@ -1,7 +1,12 @@
 'use client';
 
-import React from 'react';
-import WormholeConnect from '@wormhole-foundation/wormhole-connect';
+import React, { useMemo } from 'react';
+import dynamic from 'next/dynamic';
+
+const WormholeConnectNoSSR = dynamic(
+  () => import('@wormhole-foundation/wormhole-connect'),
+  { ssr: false }
+);
 
 export type Net = 'Mainnet' | 'Testnet';
 
@@ -12,6 +17,41 @@ interface WormholeBridgeModalProps {
   setNetwork: (n: Net) => void;
 }
 
+/** Your desired order (Connect will ignore unsupported chain ids) */
+const MAINNET_ORDER: readonly string[] = [
+  'Base',       // 1
+  'Solana',     // 2
+  'Optimism',   // 3
+  'Arbitrum',   // 4
+  /* 'Zora', */  // not a Wormhole chain (kept for clarity)
+  'Ethereum',   // 6 (ETH mainnet)
+  'Bsc',
+  'Sui',
+  'Fantom',
+  // others you already listed
+  'Polygon', 'Avalanche', 'Celo', 'Moonbeam', 'Scroll', 'Mantle',
+  'Aptos', 'Blast', 'Kaia', 'X Layer', 'World Chain',
+];
+
+const TESTNET_ORDER: readonly string[] = [
+  'BaseSepolia',
+  'SolanaDevnet',
+  'OPSepolia',
+  'ArbitrumSepolia',
+  /* 'ZoraTestnet', */
+  'EthereumSepolia',   // use this id for ETH testnet
+  'BscTestnet',
+  'SuiTestnet',
+  'FantomTestnet',
+  'PolygonAmoy',
+  'AvalancheFuji',
+  'ScrollSepolia',
+  'MantleSepolia',
+];
+
+const dedupe = (arr: readonly string[]) =>
+  Array.from(new Set(arr.filter(Boolean)));
+
 export default function WormholeBridgeModal({
   isOpen,
   onClose,
@@ -20,129 +60,61 @@ export default function WormholeBridgeModal({
 }: WormholeBridgeModalProps) {
   if (!isOpen) return null;
 
-  // Title-case IDs as shown in Connect UI
-  const chains: string[] = [
-    'Ethereum',
-    'Solana',
-    'Arbitrum',
-    'Base',
-    'Sui',
-    'Bsc',
-    'Optimism',
-    'Fantom',
-    'Polygon',
-    'Avalanche',
-    'Celo',
-    'Moonbeam',
-    'Kaia',
-    'Scroll',
-    'Mantle',
-    'Aptos',
-    'Blast',
-    'X Layer',
-    'World Chain',
-  ];
-
-  // Token order you asked for: USDC → ETH → SOL → BTC → ARB → rest
-  const tokens: string[] = [
-    'USDC',
-    'ETH',
-    'SOL',
-    'BTC',
-    'ARB',
-    'WETH',
-    'WBTC',
-    'DAI',
-    'BUSD',
-    'wstETH',
-    'tBTC',
-    'MATIC',
-    'AVAX',
-    'BNB',
-    'OP',
-    'CELO',
-    'GLMR',
-    'MNT',
-    'SUI',
-    'BLAST',
-  ];
-
-  const rpcs: Record<string, string> =
-    network === 'Mainnet'
-      ? {
-          ethereum:
-            process.env.NEXT_PUBLIC_ETHEREUM_RPC ??
-            'https://eth.llamarpc.com',
-          base:
-            process.env.NEXT_PUBLIC_BASE_RPC ??
-            'https://mainnet.base.org',
-          polygon:
-            process.env.NEXT_PUBLIC_POLYGON_RPC ??
-            'https://polygon.llamarpc.com',
-          arbitrum:
-            process.env.NEXT_PUBLIC_ARBITRUM_RPC ??
-            'https://arb1.arbitrum.io/rpc',
-          bsc:
-            process.env.NEXT_PUBLIC_BSC_RPC ??
-            'https://bsc.llamarpc.com',
-          avalanche:
-            process.env.NEXT_PUBLIC_AVALANCHE_RPC ??
-            'https://api.avax.network/ext/bc/C/rpc',
-          optimism:
-            process.env.NEXT_PUBLIC_OPTIMISM_RPC ??
-            'https://mainnet.optimism.io',
-          fantom:
-            process.env.NEXT_PUBLIC_FANTOM_RPC ??
-            'https://rpc.ftm.tools',
-          celo:
-            process.env.NEXT_PUBLIC_CELO_RPC ??
-            'https://forno.celo.org',
-          moonbeam:
-            process.env.NEXT_PUBLIC_MOONBEAM_RPC ??
-            'https://rpc.api.moonbeam.network',
-          kaia:
-            process.env.NEXT_PUBLIC_KAIA_RPC ??
-            'https://public-en.node.kaia.io',
-          scroll:
-            process.env.NEXT_PUBLIC_SCROLL_RPC ??
-            'https://rpc.scroll.io',
-          mantle:
-            process.env.NEXT_PUBLIC_MANTLE_RPC ??
-            'https://rpc.mantle.xyz',
-          blast:
-            process.env.NEXT_PUBLIC_BLAST_RPC ??
-            'https://rpc.blast.io',
-          'x layer':
-            process.env.NEXT_PUBLIC_X_LAYER_RPC ??
-            'https://rpc.xlayer.tech',
-          'world chain':
-            process.env.NEXT_PUBLIC_WORLDCHAIN_RPC ?? '', // leave empty if you don’t have an API key
-          // Solana/Aptos/Sui are handled internally by Connect; no EVM RPC needed here
-        }
-      : {
-          // TESTNET examples (fill what you have; others can be omitted)
-          base:
-            process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC ??
-            'https://sepolia.base.org',
-          // add more testnets as you obtain them (arbitrum sepolia, polygon amoy, etc.)
-        };
-
-  // Remove any empty entries so we don't pass blank URLs
-  const rpcsClean: Record<string, string> = Object.fromEntries(
-    Object.entries(rpcs).filter(([_, v]) => typeof v === 'string' && v.trim())
+  const chains = useMemo(
+    () => dedupe(network === 'Mainnet' ? MAINNET_ORDER : TESTNET_ORDER),
+    [network]
   );
 
-  const config: any = {
-    network,          // 'Mainnet' | 'Testnet'
-    chains,           // title-case list
-    tokens,           // ordered tokens
-    rpcs: rpcsClean,  // only for chains that need it
-    ui: {
-      title: network === 'Testnet' ? 'Wormhole Bridge (Testnet)' : 'Wormhole Bridge',
-      mode: 'dark',
-      primary: '#16a34a',
-    },
-  };
+  const tokens: string[] = [
+    'USDC', 'ETH', 'SOL', 'BTC', 'ARB',
+    'WETH', 'WBTC', 'DAI', 'BUSD', 'wstETH', 'tBTC',
+    'MATIC', 'AVAX', 'BNB', 'OP', 'CELO', 'GLMR', 'MNT', 'SUI', 'BLAST',
+  ];
+
+  // Build RPCs per network
+  const rpcs = useMemo<Record<string, string>>(() => {
+    const base = network === 'Mainnet'
+      ? {
+          ethereum: process.env.NEXT_PUBLIC_ETHEREUM_RPC ?? 'https://eth.llamarpc.com',
+          base:     process.env.NEXT_PUBLIC_BASE_RPC ?? 'https://mainnet.base.org',
+          polygon:  process.env.NEXT_PUBLIC_POLYGON_RPC ?? 'https://polygon.llamarpc.com',
+          arbitrum: process.env.NEXT_PUBLIC_ARBITRUM_RPC ?? 'https://arb1.arbitrum.io/rpc',
+          bsc:      process.env.NEXT_PUBLIC_BSC_RPC ?? 'https://bsc.llamarpc.com',
+          avalanche:process.env.NEXT_PUBLIC_AVALANCHE_RPC ?? 'https://api.avax.network/ext/bc/C/rpc',
+          optimism: process.env.NEXT_PUBLIC_OPTIMISM_RPC ?? 'https://mainnet.optimism.io',
+          fantom:   process.env.NEXT_PUBLIC_FANTOM_RPC ?? 'https://rpc.ftm.tools',
+          celo:     process.env.NEXT_PUBLIC_CELO_RPC ?? 'https://forno.celo.org',
+          moonbeam: process.env.NEXT_PUBLIC_MOONBEAM_RPC ?? 'https://rpc.api.moonbeam.network',
+          kaia:     process.env.NEXT_PUBLIC_KAIA_RPC ?? 'https://public-en.node.kaia.io',
+          scroll:   process.env.NEXT_PUBLIC_SCROLL_RPC ?? 'https://rpc.scroll.io',
+          mantle:   process.env.NEXT_PUBLIC_MANTLE_RPC ?? 'https://rpc.mantle.xyz',
+          blast:    process.env.NEXT_PUBLIC_BLAST_RPC ?? 'https://rpc.blast.io',
+          'x layer':process.env.NEXT_PUBLIC_X_LAYER_RPC ?? 'https://rpc.xlayer.tech',
+          'world chain': process.env.NEXT_PUBLIC_WORLDCHAIN_RPC ?? '',
+        }
+      : {
+          // ✅ fix key name: 'base', not 'baseseoplia'
+          base: process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC ?? 'https://sepolia.base.org',
+          // add more testnet RPCs if you have them
+        };
+
+    return Object.fromEntries(Object.entries(base).filter(([,v]) => v && v.trim()));
+  }, [network]);
+
+  // Build config whenever network (or rpcs) changes
+  const config = useMemo(() => {
+    return {
+      network,
+      chains,
+      tokens,
+      rpcs,
+      ui: {
+        title: network === 'Testnet' ? 'Wormhole Bridge (Testnet)' : 'Wormhole Bridge',
+        mode: 'dark',
+        primary: '#16a34a',
+      },
+    } as any;
+  }, [network, chains, rpcs]);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 p-4 flex items-center justify-center">
@@ -182,14 +154,15 @@ export default function WormholeBridgeModal({
 
           <p className="mt-2 text-center text-xs text-gray-400">
             {network === 'Testnet'
-              ? 'Using provided testnet RPCs (where available)'
-              : 'Using mainnet RPCs'}
+              ? 'Showing Base Sepolia and other testnets'
+              : 'Showing mainnets'}
           </p>
         </div>
 
         {/* Wormhole Connect */}
         <div className="p-4 overflow-auto max-h-[65vh]">
-          <WormholeConnect config={config} />
+          {/* Force remount so header switches between (Testnet) and (Mainnet) */}
+          <WormholeConnectNoSSR key={network} config={config} />
         </div>
 
         {/* Footer */}
@@ -199,4 +172,4 @@ export default function WormholeBridgeModal({
       </div>
     </div>
   );
-}  
+}
